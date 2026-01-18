@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelType, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelType, ButtonBuilder, ButtonStyle, MessageFlags, ActivityType } = require('discord.js');
 const fs = require('fs');
 
 // LOAD CONFIG WITH ERROR HANDLING
@@ -9,35 +9,27 @@ try {
     config = JSON.parse(configData);
     
     // DEBUG: Check config content
-    console.log('✅ Config loaded:', {
-        guildId: config.guildId,
-        adminRoles: config.adminRoles,
-        adminRolesIsArray: Array.isArray(config.adminRoles),
-        logChannelId: config.logChannelId
-    });
+    console.log('✅ Config loaded');
     
-    // adminRoles array check
+    // Ensure adminRoles is always an array
     if (!config.adminRoles) {
-        console.warn('⚠️ adminRoles not defined, creating empty array...');
         config.adminRoles = [];
     } else if (!Array.isArray(config.adminRoles)) {
-        console.warn('⚠️ adminRoles is not array, converting to array...');
         config.adminRoles = [config.adminRoles];
     }
     
-    // Check other required fields
+    // Set default values
     if (!config.embedColor) config.embedColor = '#7c3aed';
     if (!config.branding) config.branding = {};
-    if (!config.branding.footer) config.branding.footer = 'RuzySoft | Helper';
-    if (!config.branding.icon) config.branding.icon = 'https://i.imgur.com/default-icon.png';
+    if (!config.branding.footer) config.branding.footer = 'RuzySoft | Premium Services';
+    if (!config.branding.icon) config.branding.icon = 'https://cdn.discordapp.com/attachments/1462207492275572883/1462402361761730602/391a9977-1ccc-4749-be4c-f8cdfd572f6e.png';
     
 } catch (error) {
     console.error('❌ Error loading config:', error.message);
-    console.log('ℹ️ Using default config...');
     
     // Default config
     config = {
-        guildId: "1331289210627293276",
+        guildId: "1462207490719748250",
         ownerId: "741753240827461672",
         adminRoles: ["1462207491063419108"],
         logChannelId: "1460734266236211314",
@@ -45,7 +37,7 @@ try {
         branding: {
             name: "RuzySoft",
             icon: "https://cdn.discordapp.com/attachments/1462207492275572883/1462402361761730602/391a9977-1ccc-4749-be4c-f8cdfd572f6e.png",
-            footer: "RuzySoft | Helpers"
+            footer: "RuzySoft | Premium Services"
         }
     };
 }
@@ -57,7 +49,8 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildModeration,
-        GatewayIntentBits.GuildPresences
+        GatewayIntentBits.GuildPresences,
+        GatewayIntentBits.GuildMessageReactions
     ]
 });
 
@@ -65,7 +58,9 @@ const client = new Client({
 const db = {
     warnings: {},
     logs: [],
-    giveaways: []
+    giveaways: [],
+    applications: [],
+    polls: []
 };
 
 // STATUS VARIABLES
@@ -73,11 +68,11 @@ let statusIndex = 0;
 const statusMessages = [
     { 
         text: "https://discord.gg/pnTjcgSAMB", 
-        type: 3 // WATCHING
+        type: ActivityType.Watching
     },
     { 
         text: "RUZYSOFT.NET", 
-        type: 3 // WATCHING
+        type: ActivityType.Watching
     }
 ];
 
@@ -85,29 +80,21 @@ const statusMessages = [
 function isAdmin(member) {
     try {
         if (!member) return false;
-        if (!member.roles) return false;
-        if (!member.roles.cache) return false;
         
         // Admin permission check
         if (member.permissions.has(PermissionFlagsBits.Administrator)) {
-            console.log(`✅ ${member.user.tag} has admin permissions`);
             return true;
         }
         
         // Check admin roles from config
         if (config.adminRoles && Array.isArray(config.adminRoles)) {
-            const memberRoleIds = Array.from(member.roles.cache.keys());
-            const hasAdminRole = config.adminRoles.some(adminRoleId => 
-                memberRoleIds.includes(adminRoleId)
-            );
-            
-            if (hasAdminRole) {
-                console.log(`✅ ${member.user.tag} has admin role`);
-                return true;
+            for (const roleId of config.adminRoles) {
+                if (member.roles.cache.has(roleId)) {
+                    return true;
+                }
             }
         }
         
-        console.log(`❌ ${member.user.tag} has no access`);
         return false;
         
     } catch (error) {
@@ -151,11 +138,11 @@ function logAction(action, user, moderator, details = {}) {
                     )
                     .setTimestamp();
                 
-                Object.entries(details).forEach(([key, value]) => {
+                for (const [key, value] of Object.entries(details)) {
                     if (value) embed.addFields({ name: key, value: String(value), inline: true });
-                });
+                }
                 
-                logChannel.send({ embeds: [embed] }).catch(console.error);
+                logChannel.send({ embeds: [embed] }).catch(() => {});
             }
         }
         
@@ -193,25 +180,12 @@ function updateStatus() {
     try {
         const status = statusMessages[statusIndex];
         
-        // Status type conversion
-        let activityType;
-        switch (status.type) {
-            case 0: activityType = 'PLAYING'; break;
-            case 1: activityType = 'STREAMING'; break;
-            case 2: activityType = 'LISTENING'; break;
-            case 3: activityType = 'WATCHING'; break;
-            case 4: activityType = 'COMPETING'; break;
-            case 5: activityType = 'CUSTOM'; break;
-            default: activityType = 'WATCHING';
-        }
-        
-        client.user.setActivity(status.text, { 
-            type: status.type 
-        }).then(() => {
-            console.log(`🔄 Status updated: ${activityType} ${status.text}`);
-        }).catch(err => {
-            console.error('❌ Error updating status:', err);
+        client.user.setActivity({
+            name: status.text,
+            type: status.type
         });
+        
+        console.log(`🔄 Status updated: ${status.text}`);
         
         // Update index for next status
         statusIndex = (statusIndex + 1) % statusMessages.length;
@@ -225,38 +199,41 @@ function updateStatus() {
 client.once('ready', async () => {
     console.log(`\n✨ ================================= ✨`);
     console.log(`✅ ${client.user.tag} is online!`);
-    console.log(`📊 Servers: ${client.guilds.cache.size}`);
+    console.log(`📊 Guild: ${client.guilds.cache.first()?.name || 'Unknown'}`);
     console.log(`🎯 Guild ID: ${config.guildId}`);
     console.log(`👑 Admin Roles: ${config.adminRoles.join(', ') || 'Not defined'}`);
     console.log(`✨ ================================= ✨\n`);
     
     const guild = client.guilds.cache.get(config.guildId);
     if (!guild) {
-        console.error(`❌ Guild not found! (Guild ID: ${config.guildId})`);
+        console.error(`❌ Guild not found!`);
         return;
     }
-    
-    console.log(`✅ Guild: ${guild.name} (${guild.memberCount} members)`);
     
     // SET INITIAL STATUS
     updateStatus();
     
     // UPDATE STATUS EVERY 10 SECONDS
-    setInterval(updateStatus, 10000); // 10 seconds = 10000 milliseconds
+    setInterval(updateStatus, 10000);
     
-    // SLASH COMMANDS
+    // SLASH COMMANDS - FULL SET
     const commands = [
+        // HELP
         {
             name: 'help',
             description: 'Show help menu'
         },
+        
+        // PANEL
         {
             name: 'panel',
             description: 'Create admin control panel'
         },
+        
+        // MODERATION
         {
             name: 'ban',
-            description: 'Ban a user',
+            description: 'Ban a user from the server',
             options: [
                 {
                     name: 'user',
@@ -282,7 +259,7 @@ client.once('ready', async () => {
         },
         {
             name: 'kick',
-            description: 'Kick a user',
+            description: 'Kick a user from the server',
             options: [
                 {
                     name: 'user',
@@ -324,11 +301,11 @@ client.once('ready', async () => {
         },
         {
             name: 'untimeout',
-            description: 'Remove user timeout',
+            description: 'Remove timeout from user',
             options: [
                 {
                     name: 'user',
-                    description: 'User',
+                    description: 'User to untimeout',
                     type: 6,
                     required: true
                 },
@@ -360,11 +337,23 @@ client.once('ready', async () => {
         },
         {
             name: 'warnings',
-            description: 'Show user warnings',
+            description: 'Check user warnings',
             options: [
                 {
                     name: 'user',
-                    description: 'User',
+                    description: 'User to check',
+                    type: 6,
+                    required: true
+                }
+            ]
+        },
+        {
+            name: 'clearwarns',
+            description: 'Clear user warnings',
+            options: [
+                {
+                    name: 'user',
+                    description: 'User to clear',
                     type: 6,
                     required: true
                 }
@@ -372,7 +361,7 @@ client.once('ready', async () => {
         },
         {
             name: 'purge',
-            description: 'Clean messages',
+            description: 'Delete multiple messages',
             options: [
                 {
                     name: 'amount',
@@ -386,15 +375,73 @@ client.once('ready', async () => {
         },
         {
             name: 'lock',
-            description: 'Lock channel'
+            description: 'Lock the current channel'
         },
         {
             name: 'unlock',
-            description: 'Unlock channel'
+            description: 'Unlock the current channel'
+        },
+        
+        // MANAGEMENT
+        {
+            name: 'addrole',
+            description: 'Add role to user',
+            options: [
+                {
+                    name: 'user',
+                    description: 'User',
+                    type: 6,
+                    required: true
+                },
+                {
+                    name: 'role',
+                    description: 'Role to add',
+                    type: 8,
+                    required: true
+                }
+            ]
         },
         {
+            name: 'removerole',
+            description: 'Remove role from user',
+            options: [
+                {
+                    name: 'user',
+                    description: 'User',
+                    type: 6,
+                    required: true
+                },
+                {
+                    name: 'role',
+                    description: 'Role to remove',
+                    type: 8,
+                    required: true
+                }
+            ]
+        },
+        {
+            name: 'nick',
+            description: 'Change user nickname',
+            options: [
+                {
+                    name: 'user',
+                    description: 'User',
+                    type: 6,
+                    required: true
+                },
+                {
+                    name: 'nickname',
+                    description: 'New nickname',
+                    type: 3,
+                    required: true
+                }
+            ]
+        },
+        
+        // INFORMATION
+        {
             name: 'userinfo',
-            description: 'Show user information',
+            description: 'Get user information',
             options: [
                 {
                     name: 'user',
@@ -406,32 +453,22 @@ client.once('ready', async () => {
         },
         {
             name: 'serverinfo',
-            description: 'Show server information'
+            description: 'Get server information'
         },
         {
-            name: 'embed',
-            description: 'Create custom embed message',
+            name: 'roleinfo',
+            description: 'Get role information',
             options: [
                 {
-                    name: 'title',
-                    description: 'Title',
-                    type: 3,
+                    name: 'role',
+                    description: 'Role',
+                    type: 8,
                     required: true
-                },
-                {
-                    name: 'description',
-                    description: 'Description',
-                    type: 3,
-                    required: true
-                },
-                {
-                    name: 'color',
-                    description: 'Color (e.g., #ff0000)',
-                    type: 3,
-                    required: false
                 }
             ]
         },
+        
+        // ANNOUNCEMENTS
         {
             name: 'announce',
             description: 'Make announcement',
@@ -447,16 +484,131 @@ client.once('ready', async () => {
                     description: 'Announcement message',
                     type: 3,
                     required: true
+                },
+                {
+                    name: 'ping',
+                    description: 'Role to ping',
+                    type: 8,
+                    required: false
                 }
             ]
         },
         {
+            name: 'embed',
+            description: 'Create custom embed',
+            options: [
+                {
+                    name: 'title',
+                    description: 'Embed title',
+                    type: 3,
+                    required: true
+                },
+                {
+                    name: 'description',
+                    description: 'Embed description',
+                    type: 3,
+                    required: true
+                },
+                {
+                    name: 'color',
+                    description: 'Embed color (hex)',
+                    type: 3,
+                    required: false
+                }
+            ]
+        },
+        
+        // GIVEAWAYS
+        {
+            name: 'giveaway',
+            description: 'Create a giveaway',
+            options: [
+                {
+                    name: 'prize',
+                    description: 'Giveaway prize',
+                    type: 3,
+                    required: true
+                },
+                {
+                    name: 'duration',
+                    description: 'Duration (e.g., 1h, 2d)',
+                    type: 3,
+                    required: true
+                },
+                {
+                    name: 'winners',
+                    description: 'Number of winners',
+                    type: 4,
+                    required: true,
+                    min_value: 1,
+                    max_value: 10
+                }
+            ]
+        },
+        
+        // POLLS
+        {
+            name: 'poll',
+            description: 'Create a poll',
+            options: [
+                {
+                    name: 'question',
+                    description: 'Poll question',
+                    type: 3,
+                    required: true
+                },
+                {
+                    name: 'option1',
+                    description: 'Option 1',
+                    type: 3,
+                    required: true
+                },
+                {
+                    name: 'option2',
+                    description: 'Option 2',
+                    type: 3,
+                    required: true
+                },
+                {
+                    name: 'option3',
+                    description: 'Option 3',
+                    type: 3,
+                    required: false
+                },
+                {
+                    name: 'option4',
+                    description: 'Option 4',
+                    type: 3,
+                    required: false
+                }
+            ]
+        },
+        
+        // UTILITIES
+        {
             name: 'ping',
-            description: 'Show bot latency'
+            description: 'Check bot latency'
         },
         {
             name: 'stats',
             description: 'Show bot statistics'
+        },
+        {
+            name: 'setup',
+            description: 'Setup systems',
+            options: [
+                {
+                    name: 'system',
+                    description: 'System to setup',
+                    type: 3,
+                    required: true,
+                    choices: [
+                        { name: '🎛️ Control Panel', value: 'panel' },
+                        { name: '🎟️ Applications', value: 'applications' },
+                        { name: '📢 Announcements', value: 'announcements' }
+                    ]
+                }
+            ]
         }
     ];
     
@@ -479,14 +631,11 @@ client.on('interactionCreate', async interaction => {
     try {
         // PERMISSION CHECK - ADMINS ONLY
         if (!isAdmin(member)) {
-            console.log(`❌ Permission denied: ${user.tag}`);
             return interaction.reply({
-                content: '❌ **Permission denied!** Only admins can use these commands.',
+                content: '❌ **Permission Denied!** Only administrators can use these commands.',
                 flags: MessageFlags.Ephemeral
             });
         }
-        
-        console.log(`✅ Permission granted: ${user.tag}`);
         
         // COMMAND ROUTING
         switch (commandName) {
@@ -495,6 +644,9 @@ client.on('interactionCreate', async interaction => {
                 break;
             case 'panel':
                 await handlePanel(interaction);
+                break;
+            case 'setup':
+                await handleSetup(interaction);
                 break;
             case 'ban':
                 await handleBan(interaction);
@@ -514,6 +666,9 @@ client.on('interactionCreate', async interaction => {
             case 'warnings':
                 await handleWarnings(interaction);
                 break;
+            case 'clearwarns':
+                await handleClearWarns(interaction);
+                break;
             case 'purge':
                 await handlePurge(interaction);
                 break;
@@ -523,17 +678,35 @@ client.on('interactionCreate', async interaction => {
             case 'unlock':
                 await handleUnlock(interaction);
                 break;
+            case 'addrole':
+                await handleAddRole(interaction);
+                break;
+            case 'removerole':
+                await handleRemoveRole(interaction);
+                break;
+            case 'nick':
+                await handleNick(interaction);
+                break;
             case 'userinfo':
                 await handleUserInfo(interaction);
                 break;
             case 'serverinfo':
                 await handleServerInfo(interaction);
                 break;
-            case 'embed':
-                await handleEmbed(interaction);
+            case 'roleinfo':
+                await handleRoleInfo(interaction);
                 break;
             case 'announce':
                 await handleAnnounce(interaction);
+                break;
+            case 'embed':
+                await handleEmbed(interaction);
+                break;
+            case 'giveaway':
+                await handleGiveaway(interaction);
+                break;
+            case 'poll':
+                await handlePoll(interaction);
                 break;
             case 'ping':
                 await handlePing(interaction);
@@ -551,14 +724,10 @@ client.on('interactionCreate', async interaction => {
     } catch (error) {
         console.error(`❌ Command error (/${commandName}):`, error);
         
-        try {
-            await interaction.reply({
-                content: '❌ An error occurred! Please try again later.',
-                flags: MessageFlags.Ephemeral
-            });
-        } catch (e) {
-            console.error('Failed to send error message:', e);
-        }
+        await interaction.reply({
+            content: '❌ An error occurred! Please try again later.',
+            flags: MessageFlags.Ephemeral
+        }).catch(() => {});
     }
 });
 
@@ -568,27 +737,31 @@ async function handleHelp(interaction) {
     const embed = new EmbedBuilder()
         .setTitle('🛠️ RuzySoft Admin Bot - Help')
         .setColor(config.embedColor)
-        .setDescription('**Commands available only to admins:**')
+        .setDescription('**Commands available only to administrators:**')
         .addFields(
             { 
                 name: '🛡️ Moderation', 
-                value: '`/ban` - Ban user\n`/kick` - Kick user\n`/timeout` - Timeout user\n`/warn` - Warn user' 
+                value: '`/ban` `/kick` `/timeout` `/untimeout`\n`/warn` `/warnings` `/clearwarns` `/purge`\n`/lock` `/unlock`' 
             },
             { 
-                name: '🔧 Management', 
-                value: '`/purge` - Clean messages\n`/lock` - Lock channel\n`/unlock` - Unlock channel' 
+                name: '👤 Management', 
+                value: '`/addrole` `/removerole` `/nick`' 
             },
             { 
                 name: '📊 Information', 
-                value: '`/userinfo` - User info\n`/serverinfo` - Server info\n`/stats` - Bot statistics' 
+                value: '`/userinfo` `/serverinfo` `/roleinfo`' 
             },
             { 
                 name: '📢 Announcements', 
-                value: '`/announce` - Make announcement\n`/embed` - Create custom embed' 
+                value: '`/announce` `/embed`' 
+            },
+            { 
+                name: '🎉 Fun & Games', 
+                value: '`/giveaway` `/poll`' 
             },
             { 
                 name: '⚙️ Utilities', 
-                value: '`/panel` - Control panel\n`/ping` - Ping test\n`/help` - This menu' 
+                value: '`/panel` `/setup` `/ping` `/stats` `/help`' 
             }
         )
         .setFooter({ 
@@ -607,8 +780,86 @@ async function handlePanel(interaction) {
         .setDescription('**Admin Control Panel**\nUse the buttons below to manage the server.')
         .addFields(
             { name: '🛡️ Moderation', value: 'Ban, Kick, Timeout, Warn', inline: true },
-            { name: '🔧 Management', value: 'Lock, Purge, Settings', inline: true },
-            { name: '📊 Information', value: 'Stats, Info, Logs', inline: true }
+            { name: '👤 Management', value: 'Roles, Nicknames, Permissions', inline: true },
+            { name: '📊 Information', value: 'User & Server Stats', inline: true },
+            { name: '📢 Announcements', value: 'Embeds, Giveaways, Polls', inline: true },
+            { name: '⚙️ Utilities', value: 'Setup, Logs, Settings', inline: true }
+        )
+        .setFooter({ 
+            text: config.branding.footer,
+            iconURL: config.branding.icon
+        })
+        .setTimestamp();
+    
+    const row1 = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('mod_panel')
+                .setLabel('🛡️ Moderation')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('mgmt_panel')
+                .setLabel('👤 Management')
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId('info_panel')
+                .setLabel('📊 Information')
+                .setStyle(ButtonStyle.Success)
+        );
+    
+    const row2 = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('announce_panel')
+                .setLabel('📢 Announcements')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('util_panel')
+                .setLabel('⚙️ Utilities')
+                .setStyle(ButtonStyle.Secondary)
+        );
+    
+    await interaction.reply({ 
+        content: '**Admin Panel Created!**',
+        embeds: [embed], 
+        components: [row1, row2] 
+    });
+}
+
+async function handleSetup(interaction) {
+    const system = interaction.options.getString('system');
+    
+    if (system === 'panel') {
+        await handlePanel(interaction);
+    } else if (system === 'applications') {
+        await setupApplications(interaction);
+    } else if (system === 'announcements') {
+        await setupAnnouncements(interaction);
+    }
+}
+
+async function setupApplications(interaction) {
+    const embed = new EmbedBuilder()
+        .setTitle('🎟️ RuzySoft Applications')
+        .setColor('#10b981')
+        .setDescription('Apply for various positions within RuzySoft')
+        .addFields(
+            { 
+                name: '👨‍💼 Staff Application', 
+                value: 'Apply for moderator or administrator position' 
+            },
+            { 
+                name: '🤝 Partnership', 
+                value: 'Apply for server partnership' 
+            },
+            { 
+                name: '📺 Content Creator', 
+                value: 'Apply for content creator role' 
+            },
+            { 
+                name: '🔧 Developer', 
+                value: 'Apply for developer position' 
+            }
         )
         .setFooter({ 
             text: config.branding.footer,
@@ -618,24 +869,67 @@ async function handlePanel(interaction) {
     
     const row = new ActionRowBuilder()
         .addComponents(
-            new ButtonBuilder()
-                .setCustomId('mod_panel')
-                .setLabel('🛡️ Moderation')
-                .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setCustomId('mgmt_panel')
-                .setLabel('🔧 Management')
-                .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-                .setCustomId('info_panel')
-                .setLabel('📊 Information')
-                .setStyle(ButtonStyle.Success)
+            new StringSelectMenuBuilder()
+                .setCustomId('application_select')
+                .setPlaceholder('Select application type...')
+                .addOptions([
+                    {
+                        label: 'Staff Application',
+                        description: 'Apply for staff position',
+                        value: 'staff_app',
+                        emoji: '👨‍💼'
+                    },
+                    {
+                        label: 'Partnership',
+                        description: 'Apply for partnership',
+                        value: 'partner_app',
+                        emoji: '🤝'
+                    },
+                    {
+                        label: 'Content Creator',
+                        description: 'Apply for creator role',
+                        value: 'creator_app',
+                        emoji: '📺'
+                    },
+                    {
+                        label: 'Developer',
+                        description: 'Apply for developer position',
+                        value: 'dev_app',
+                        emoji: '🔧'
+                    }
+                ])
         );
     
-    await interaction.reply({ 
-        content: '**Admin Panel Created!**',
-        embeds: [embed], 
-        components: [row] 
+    await interaction.channel.send({ embeds: [embed], components: [row] });
+    
+    await interaction.reply({
+        content: '✅ Applications system setup complete!',
+        flags: MessageFlags.Ephemeral
+    });
+}
+
+async function setupAnnouncements(interaction) {
+    const embed = new EmbedBuilder()
+        .setTitle('📢 Announcement Channel')
+        .setColor('#fbbf24')
+        .setDescription('This is the official announcement channel for RuzySoft.\n\nAll important updates, giveaways, and news will be posted here.')
+        .addFields(
+            { name: '📢 Updates', value: 'Product updates and news' },
+            { name: '🎉 Giveaways', value: 'Weekly giveaways and contests' },
+            { name: '📅 Events', value: 'Server events and activities' },
+            { name: '🆕 Releases', value: 'New product releases' }
+        )
+        .setFooter({ 
+            text: config.branding.footer,
+            iconURL: config.branding.icon
+        })
+        .setTimestamp();
+    
+    await interaction.channel.send({ embeds: [embed] });
+    
+    await interaction.reply({
+        content: '✅ Announcement channel setup complete!',
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -667,7 +961,6 @@ async function handleBan(interaction) {
         await interaction.reply({ embeds: [embed] });
         
     } catch (error) {
-        console.error('Ban error:', error);
         await interaction.reply({
             content: '❌ Failed to ban user!',
             flags: MessageFlags.Ephemeral
@@ -698,7 +991,6 @@ async function handleKick(interaction) {
         await interaction.reply({ embeds: [embed] });
         
     } catch (error) {
-        console.error('Kick error:', error);
         await interaction.reply({
             content: '❌ Failed to kick user!',
             flags: MessageFlags.Ephemeral
@@ -740,7 +1032,6 @@ async function handleTimeout(interaction) {
         await interaction.reply({ embeds: [embed] });
         
     } catch (error) {
-        console.error('Timeout error:', error);
         await interaction.reply({
             content: '❌ Failed to timeout user!',
             flags: MessageFlags.Ephemeral
@@ -763,7 +1054,6 @@ async function handleUntimeout(interaction) {
         });
         
     } catch (error) {
-        console.error('Untimeout error:', error);
         await interaction.reply({
             content: '❌ Failed to remove timeout!',
             flags: MessageFlags.Ephemeral
@@ -830,6 +1120,19 @@ async function handleWarnings(interaction) {
     await interaction.reply({ embeds: [embed] });
 }
 
+async function handleClearWarns(interaction) {
+    const user = interaction.options.getUser('user');
+    const warnCount = (db.warnings[user.id] || []).length;
+    
+    delete db.warnings[user.id];
+    
+    logAction('Clear Warnings', user, interaction.user, { count: warnCount });
+    
+    await interaction.reply({
+        content: `✅ Cleared ${warnCount} warnings from **${user.tag}**.`
+    });
+}
+
 async function handlePurge(interaction) {
     const amount = interaction.options.getInteger('amount');
     
@@ -853,7 +1156,6 @@ async function handlePurge(interaction) {
         });
         
     } catch (error) {
-        console.error('Purge error:', error);
         await interaction.editReply({
             content: '❌ Failed to delete messages!'
         });
@@ -879,7 +1181,6 @@ async function handleLock(interaction) {
         });
         
     } catch (error) {
-        console.error('Lock error:', error);
         await interaction.reply({
             content: '❌ Failed to lock channel!',
             flags: MessageFlags.Ephemeral
@@ -899,9 +1200,68 @@ async function handleUnlock(interaction) {
         });
         
     } catch (error) {
-        console.error('Unlock error:', error);
         await interaction.reply({
             content: '❌ Failed to unlock channel!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleAddRole(interaction) {
+    const user = interaction.options.getUser('user');
+    const role = interaction.options.getRole('role');
+    
+    try {
+        const member = await interaction.guild.members.fetch(user.id);
+        await member.roles.add(role);
+        
+        await interaction.reply({
+            content: `✅ Added **${role.name}** role to **${user.tag}**`
+        });
+        
+    } catch (error) {
+        await interaction.reply({
+            content: '❌ Failed to add role!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleRemoveRole(interaction) {
+    const user = interaction.options.getUser('user');
+    const role = interaction.options.getRole('role');
+    
+    try {
+        const member = await interaction.guild.members.fetch(user.id);
+        await member.roles.remove(role);
+        
+        await interaction.reply({
+            content: `✅ Removed **${role.name}** role from **${user.tag}**`
+        });
+        
+    } catch (error) {
+        await interaction.reply({
+            content: '❌ Failed to remove role!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleNick(interaction) {
+    const user = interaction.options.getUser('user');
+    const nickname = interaction.options.getString('nickname');
+    
+    try {
+        const member = await interaction.guild.members.fetch(user.id);
+        await member.setNickname(nickname);
+        
+        await interaction.reply({
+            content: `✅ **${user.tag}** nickname changed to **${nickname}**`
+        });
+        
+    } catch (error) {
+        await interaction.reply({
+            content: '❌ Failed to change nickname!',
             flags: MessageFlags.Ephemeral
         });
     }
@@ -931,7 +1291,6 @@ async function handleUserInfo(interaction) {
         await interaction.reply({ embeds: [embed] });
         
     } catch (error) {
-        console.error('UserInfo error:', error);
         await interaction.reply({
             content: '❌ Failed to get user information!',
             flags: MessageFlags.Ephemeral
@@ -962,6 +1321,47 @@ async function handleServerInfo(interaction) {
     await interaction.reply({ embeds: [embed] });
 }
 
+async function handleRoleInfo(interaction) {
+    const role = interaction.options.getRole('role');
+    
+    const embed = new EmbedBuilder()
+        .setTitle(`🎭 ${role.name}`)
+        .setColor(role.color || '#99aab5')
+        .addFields(
+            { name: '🆔 ID', value: role.id, inline: true },
+            { name: '🎨 Color', value: role.hexColor, inline: true },
+            { name: '📊 Position', value: role.position.toString(), inline: true },
+            { name: '👥 Members', value: role.members.size.toString(), inline: true },
+            { name: '📍 Mentionable', value: role.mentionable ? 'Yes' : 'No', inline: true },
+            { name: '⬆️ Hoisted', value: role.hoist ? 'Yes' : 'No', inline: true },
+            { name: '📅 Created', value: `<t:${Math.floor(role.createdTimestamp/1000)}:R>`, inline: true }
+        )
+        .setFooter({ text: `Requested by: ${interaction.user.tag}` })
+        .setTimestamp();
+    
+    await interaction.reply({ embeds: [embed] });
+}
+
+async function handleAnnounce(interaction) {
+    const title = interaction.options.getString('title');
+    const message = interaction.options.getString('message');
+    const ping = interaction.options.getRole('ping');
+    
+    const embed = new EmbedBuilder()
+        .setTitle(`📢 ${title}`)
+        .setDescription(message)
+        .setColor('#10b981')
+        .setFooter({ 
+            text: config.branding.footer,
+            iconURL: config.branding.icon
+        })
+        .setTimestamp();
+    
+    const content = ping ? `${ping}` : '';
+    
+    await interaction.reply({ content, embeds: [embed] });
+}
+
 async function handleEmbed(interaction) {
     const title = interaction.options.getString('title');
     const description = interaction.options.getString('description');
@@ -980,21 +1380,136 @@ async function handleEmbed(interaction) {
     await interaction.reply({ embeds: [embed] });
 }
 
-async function handleAnnounce(interaction) {
-    const title = interaction.options.getString('title');
-    const message = interaction.options.getString('message');
+async function handleGiveaway(interaction) {
+    const prize = interaction.options.getString('prize');
+    const duration = interaction.options.getString('duration');
+    const winners = interaction.options.getInteger('winners');
+    
+    const ms = parseDuration(duration);
+    if (!ms) {
+        return interaction.reply({
+            content: '❌ Invalid duration! Usage: 1h, 2d',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+    
+    const endTime = Date.now() + ms;
     
     const embed = new EmbedBuilder()
-        .setTitle(`📢 ${title}`)
-        .setDescription(message)
-        .setColor('#10b981')
-        .setFooter({ 
-            text: config.branding.footer,
-            iconURL: config.branding.icon
-        })
+        .setTitle('🎉 GIVEAWAY 🎉')
+        .setDescription(`**Prize:** ${prize}\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime/1000)}:R>`)
+        .setColor('#fbbf24')
+        .setFooter({ text: `Hosted by ${interaction.user.tag}` })
         .setTimestamp();
     
-    await interaction.reply({ embeds: [embed] });
+    const message = await interaction.reply({ 
+        embeds: [embed], 
+        fetchReply: true,
+        content: '🎉 **GIVEAWAY** 🎉'
+    });
+    
+    await message.react('🎉');
+    
+    db.giveaways.push({
+        messageId: message.id,
+        channelId: interaction.channel.id,
+        prize,
+        winners,
+        endTime,
+        host: interaction.user.id
+    });
+    
+    // End giveaway after duration
+    setTimeout(async () => {
+        await endGiveaway(message.id);
+    }, ms);
+}
+
+async function endGiveaway(messageId) {
+    const giveaway = db.giveaways.find(g => g.messageId === messageId);
+    if (!giveaway) return;
+    
+    try {
+        const channel = client.channels.cache.get(giveaway.channelId);
+        if (!channel) return;
+        
+        const message = await channel.messages.fetch(messageId);
+        const reaction = message.reactions.cache.get('🎉');
+        
+        if (!reaction) return;
+        
+        const users = await reaction.users.fetch();
+        const validUsers = users.filter(u => !u.bot);
+        
+        if (validUsers.size < giveaway.winners) {
+            const embed = EmbedBuilder.from(message.embeds[0])
+                .setDescription(`**Prize:** ${giveaway.prize}\n**Winners:** ${giveaway.winners}\n**Ended:** Not enough participants!`)
+                .setColor('#ef4444');
+            
+            await message.edit({ embeds: [embed] });
+            await message.reply('🎉 Giveaway ended with not enough participants!');
+            return;
+        }
+        
+        const winners = [];
+        const userArray = Array.from(validUsers.values());
+        
+        for (let i = 0; i < giveaway.winners; i++) {
+            const randomIndex = Math.floor(Math.random() * userArray.length);
+            winners.push(userArray[randomIndex]);
+            userArray.splice(randomIndex, 1);
+        }
+        
+        const winnersText = winners.map(w => `<@${w.id}>`).join(', ');
+        
+        const embed = EmbedBuilder.from(message.embeds[0])
+            .setDescription(`**Prize:** ${giveaway.prize}\n**Winners:** ${winnersText}\n**Ended:** <t:${Math.floor(Date.now()/1000)}:R>`)
+            .setColor('#10b981');
+        
+        await message.edit({ embeds: [embed] });
+        await message.reply(`🎉 **Giveaway Ended!**\n**Winner(s):** ${winnersText}\n**Prize:** ${giveaway.prize}`);
+        
+        db.giveaways = db.giveaways.filter(g => g.messageId !== messageId);
+    } catch (error) {
+        console.error('Error ending giveaway:', error);
+    }
+}
+
+async function handlePoll(interaction) {
+    const question = interaction.options.getString('question');
+    const options = [
+        interaction.options.getString('option1'),
+        interaction.options.getString('option2'),
+        interaction.options.getString('option3'),
+        interaction.options.getString('option4')
+    ].filter(opt => opt);
+    
+    if (options.length < 2) {
+        return interaction.reply({
+            content: '❌ Poll must have at least 2 options!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+    
+    const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣'];
+    
+    let description = '';
+    options.forEach((option, index) => {
+        description += `${emojis[index]} ${option}\n\n`;
+    });
+    
+    const embed = new EmbedBuilder()
+        .setTitle(`📊 ${question}`)
+        .setDescription(description)
+        .setColor('#3b82f6')
+        .setFooter({ text: `Poll by ${interaction.user.tag}` })
+        .setTimestamp();
+    
+    const message = await interaction.reply({ embeds: [embed], fetchReply: true });
+    
+    for (let i = 0; i < options.length; i++) {
+        await message.react(emojis[i]);
+    }
 }
 
 async function handlePing(interaction) {
@@ -1019,7 +1534,7 @@ async function handleStats(interaction) {
             { name: '🎭 Total Roles', value: interaction.guild.roles.cache.size.toString(), inline: true },
             { name: '⚠️ Total Warnings', value: Object.values(db.warnings).reduce((a, b) => a + b.length, 0).toString(), inline: true },
             { name: '📝 Total Logs', value: db.logs.length.toString(), inline: true },
-            { name: '🔄 Command Count', value: '20+', inline: true }
+            { name: '🔄 Command Count', value: '30+', inline: true }
         )
         .setFooter({ 
             text: config.branding.footer,
@@ -1054,5 +1569,5 @@ process.on('uncaughtException', error => {
 });
 
 // START BOT
-console.log('🚀 Starting bot...');
+console.log('🚀 Starting RuzySoft Bot...');
 client.login(process.env.DISCORD_TOKEN);
