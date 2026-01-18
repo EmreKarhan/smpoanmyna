@@ -25,12 +25,6 @@ let db = {
     giveaways: []
 };
 
-// Helper functions
-function isStaff(member) {
-    return config.staffRoles.some(roleId => member.roles.cache.has(roleId)) || 
-           member.permissions.has(PermissionFlagsBits.Administrator);
-}
-
 function isAdmin(member) {
     return config.adminRoles.some(roleId => member.roles.cache.has(roleId)) || 
            member.permissions.has(PermissionFlagsBits.Administrator);
@@ -568,14 +562,6 @@ client.on('interactionCreate', async interaction => {
         const command = interaction.commandName;
         const member = interaction.member;
         
-        // Staff only commands
-        if (!isStaff(member) && !config.publicCommands.includes(command)) {
-            return interaction.reply({
-                content: '❌ You do not have permission to use this command!',
-                flags: MessageFlags.Ephemeral
-            });
-        }
-        
         switch (command) {
             case 'setup':
                 await handleSetup(interaction);
@@ -871,13 +857,6 @@ async function handleKick(interaction) {
     const user = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason') || 'No reason provided';
     
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to kick users!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
-    
     try {
         await interaction.guild.members.kick(user, `By ${interaction.user.tag}: ${reason}`);
         
@@ -905,13 +884,6 @@ async function handleKick(interaction) {
 async function handleWarn(interaction) {
     const user = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason');
-    
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to warn users!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
     
     if (!db.warnings[user.id]) {
         db.warnings[user.id] = [];
@@ -950,13 +922,6 @@ async function handleWarn(interaction) {
 async function handleWarnings(interaction) {
     const user = interaction.options.getUser('user');
     
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to view warnings!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
-    
     const warnings = db.warnings[user.id] || [];
     
     if (warnings.length === 0) {
@@ -985,13 +950,6 @@ async function handleWarnings(interaction) {
 async function handleClearWarns(interaction) {
     const user = interaction.options.getUser('user');
     
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to clear warnings!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
-    
     const warnCount = (db.warnings[user.id] || []).length;
     delete db.warnings[user.id];
     
@@ -1006,13 +964,6 @@ async function handleTimeout(interaction) {
     const user = interaction.options.getUser('user');
     const duration = interaction.options.getString('duration');
     const reason = interaction.options.getString('reason') || 'No reason provided';
-    
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to timeout users!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
     
     const ms = parseDuration(duration);
     if (!ms || ms > 2419200000) { // Max 28 days
@@ -1052,13 +1003,6 @@ async function handleUntimeout(interaction) {
     const user = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason') || 'No reason provided';
     
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to remove timeouts!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
-    
     try {
         const member = await interaction.guild.members.fetch(user.id);
         await member.timeout(null, `By ${interaction.user.tag}: ${reason}`);
@@ -1079,13 +1023,6 @@ async function handleUntimeout(interaction) {
 async function handlePurge(interaction) {
     const amount = interaction.options.getInteger('amount');
     const user = interaction.options.getUser('user');
-    
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to purge messages!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
     
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     
@@ -1112,13 +1049,6 @@ async function handlePurge(interaction) {
 
 async function handleLock(interaction) {
     const channel = interaction.options.getChannel('channel') || interaction.channel;
-    
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to lock channels!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
     
     try {
         await channel.permissionOverwrites.edit(interaction.guild.id, {
@@ -1147,13 +1077,6 @@ async function handleLock(interaction) {
 async function handleUnlock(interaction) {
     const channel = interaction.options.getChannel('channel') || interaction.channel;
     
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to unlock channels!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
-    
     try {
         await channel.permissionOverwrites.edit(interaction.guild.id, {
             SendMessages: true
@@ -1174,13 +1097,7 @@ async function handleUnlock(interaction) {
 async function handleSlowmode(interaction) {
     const duration = interaction.options.getInteger('duration');
     const channel = interaction.options.getChannel('channel') || interaction.channel;
-    
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to set slowmode!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
+
     
     try {
         await channel.setRateLimitPerUser(duration);
@@ -1205,12 +1122,6 @@ async function handleNick(interaction) {
     const user = interaction.options.getUser('user');
     const nickname = interaction.options.getString('nickname');
     
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to change nicknames!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
     
     try {
         const member = await interaction.guild.members.fetch(user.id);
@@ -1231,13 +1142,6 @@ async function handleAddRole(interaction) {
     const user = interaction.options.getUser('user');
     const role = interaction.options.getRole('role');
     
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to add roles!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
-    
     try {
         const member = await interaction.guild.members.fetch(user.id);
         await member.roles.add(role);
@@ -1256,13 +1160,6 @@ async function handleAddRole(interaction) {
 async function handleRemoveRole(interaction) {
     const user = interaction.options.getUser('user');
     const role = interaction.options.getRole('role');
-    
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to remove roles!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
     
     try {
         const member = await interaction.guild.members.fetch(user.id);
@@ -1357,13 +1254,6 @@ async function handleEmbed(interaction) {
     const color = interaction.options.getString('color') || config.embedColor;
     const channel = interaction.options.getChannel('channel') || interaction.channel;
     
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to create embeds!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
-    
     const embed = new EmbedBuilder()
         .setTitle(title)
         .setDescription(description)
@@ -1378,13 +1268,6 @@ async function handleEmbed(interaction) {
 }
 
 async function handleAnnounce(interaction) {
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to make announcements!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
-    
     const title = interaction.options.getString('title');
     const message = interaction.options.getString('message');
     const ping = interaction.options.getRole('ping');
@@ -1405,13 +1288,6 @@ async function handleAnnounce(interaction) {
 }
 
 async function handleGiveaway(interaction) {
-    if (!isStaff(interaction.member)) {
-        return interaction.reply({
-            content: '❌ You do not have permission to create giveaways!',
-            flags: MessageFlags.Ephemeral
-        });
-    }
-    
     const prize = interaction.options.getString('prize');
     const duration = interaction.options.getString('duration');
     const winners = interaction.options.getInteger('winners');
