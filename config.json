@@ -1,44 +1,16 @@
 {
   "guildId": "1331289210627293276",
   "ownerId": "741753240827461672",
-  "ticketRoleId": [
-    "1334633974131068968",
-    "1334633975095758878",
-    "1460725532936110101"
-  ],
-  "ticketCategoryId": "1334634042242633840",
+  "adminRoles": ["1462207491063419108"],
+  "staffRoles": ["1462207491063419108"],
   "logChannelId": "1460734266236211314",
-  "categories": {
-    "payment": {
-      "name": "Payments",
-      "description": "Billing, purchases & payment support.",
-      "emoji": "💳"
-    },
-    "support": {
-      "name": "Support",
-      "description": "Product help & technical assistance.",
-      "emoji": "💬"
-    },
-    "reseller": {
-      "name": "Reseller",
-      "description": "Apply for reseller partnership.",
-      "emoji": "🤝"
-    },
-    "media": {
-      "name": "Media",
-      "description": "Creator & promoter applications.",
-      "emoji": "📺"
-    },
-    "hwid": {
-      "name": "🔧 HWID Reset",
-      "description": "Reset your hardware identification.",
-      "emoji": "🔧"
-    }
-  },
+  "muteRoleId": "YOUR_MUTE_ROLE_ID_HERE",
+  "warnThreshold": 3,
   "embedColor": "#7c3aed",
-  "supportMessage": {
-    "title": "🎫 Create a Ticket",
-    "description": "Choose the **appropriate category** to get started.\n\n• One ticket per category\n• No spam or unnecessary pings\n• Please be patient while we assist you\n• Reseller purchases are handled by the reseller\n\n**Support Online**\n<@&1460720542897279319>",
-    "footer": "RuzySoft Tickets"
+  "publicCommands": ["help", "ping", "userinfo", "serverinfo", "afk", "stats"],
+  "branding": {
+    "name": "RuzySoft",
+    "icon": "https://cdn.discordapp.com/attachments/1462207492275572883/1462402361761730602/391a9977-1ccc-4749-be4c-f8cdfd572f6e.png?ex=696e0fd5&is=696cbe55&hm=cc2546cec05e46a820a74aa25441e92dc7d8210b02e45e7712d50c20cd66c341&",
+    "footer": "RuzySoft | Helpers"
   }
 }
