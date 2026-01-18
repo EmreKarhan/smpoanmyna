@@ -1,20 +1,25 @@
 {
-  "name": "discord-ticket-bot",
-  "version": "1.0.0",
-  "description": "Discord ticket bot with category selection",
+  "name": "ruzysoft-bot",
+  "version": "3.0.0",
+  "description": "RuzySoft | Helpers",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
-    "discord.js": "^14.14.1",
-    "fs": "^0.0.1-security"
+    "discord.js": "^14.14.1"
   },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
-  },
-  "keywords": ["discord", "bot", "ticket"],
-  "author": "Sarp",
-  "license": "MIT"
+  "keywords": [
+    "ruzysoft",
+    "discord",
+    "bot",
+    "admin",
+    "moderation"
+  ],
+  "author": "RuzySoft",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.9.0"
+  }
 }
