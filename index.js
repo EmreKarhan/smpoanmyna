@@ -1,6 +1,5 @@
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelType, ButtonBuilder, ButtonStyle, AttachmentBuilder, MessageFlags, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelType, ButtonBuilder, ButtonStyle, AttachmentBuilder, MessageFlags } = require('discord.js');
 const fs = require('fs');
-const axios = require('axios');
 
 // Load config file
 const config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
@@ -16,14 +15,13 @@ const client = new Client({
     ]
 });
 
-// Database simulation (use MongoDB or SQL in production)
+// Database simulation
 let db = {
     warnings: {},
     logs: [],
     temporaryRoles: {},
     suggestions: [],
     afkUsers: {},
-    reactionRoles: {},
     giveaways: []
 };
 
@@ -129,9 +127,7 @@ client.once('ready', async () => {
                 required: true,
                 choices: [
                     { name: '🎛️ Control Panel', value: 'panel' },
-                    { name: '🎟️ Applications', value: 'applications' },
-                    { name: '📢 Announcements', value: 'announcements' },
-                    { name: '📊 Stats Channel', value: 'stats' }
+                    { name: '🎟️ Applications', value: 'applications' }
                 ]
             }]
         },
@@ -526,18 +522,6 @@ client.once('ready', async () => {
             ]
         },
         {
-            name: 'afk',
-            description: 'Set AFK status',
-            options: [
-                {
-                    name: 'reason',
-                    description: 'AFK reason',
-                    type: 3,
-                    required: false
-                }
-            ]
-        },
-        {
             name: 'stats',
             description: 'Show bot statistics'
         },
@@ -565,26 +549,6 @@ client.once('ready', async () => {
     } catch (error) {
         console.error('❌ Error loading commands:', error);
     }
-    
-    // Check temporary roles
-    setInterval(() => {
-        const now = Date.now();
-        for (const [userId, roles] of Object.entries(db.temporaryRoles)) {
-            for (const [roleId, expireTime] of Object.entries(roles)) {
-                if (now > expireTime) {
-                    const guild = client.guilds.cache.get(config.guildId);
-                    const member = guild.members.cache.get(userId);
-                    if (member) {
-                        member.roles.remove(roleId).catch(console.error);
-                    }
-                    delete roles[roleId];
-                }
-            }
-            if (Object.keys(roles).length === 0) {
-                delete db.temporaryRoles[userId];
-            }
-        }
-    }, 60000);
     
     // Update bot status
     setInterval(() => {
@@ -682,9 +646,6 @@ client.on('interactionCreate', async interaction => {
             case 'poll':
                 await handlePoll(interaction);
                 break;
-            case 'afk':
-                await handleAfk(interaction);
-                break;
             case 'stats':
                 await handleStats(interaction);
                 break;
@@ -694,13 +655,6 @@ client.on('interactionCreate', async interaction => {
             case 'help':
                 await handleHelp(interaction);
                 break;
-        }
-    }
-    
-    // Button interactions
-    if (interaction.isButton()) {
-        if (interaction.customId.startsWith('application_')) {
-            await handleApplicationButton(interaction);
         }
     }
 });
@@ -723,12 +677,6 @@ async function handleSetup(interaction) {
         case 'applications':
             await setupApplications(interaction);
             break;
-        case 'announcements':
-            await setupAnnouncements(interaction);
-            break;
-        case 'stats':
-            await setupStatsChannel(interaction);
-            break;
     }
 }
 
@@ -747,7 +695,7 @@ async function setupControlPanel(interaction) {
         )
         .setFooter({ 
             text: 'RuzySoft | Premium Services',
-            iconURL: 'https://cdn.discordapp.com/attachments/1337564450600910858/1460716091327254629/0b8e5a2c-1eff-414c-858c-b8af487e6111.png?ex=6967ed5e&is=69669bde&hm=2d42e3861eec9f9fbc767cfcdda36edd3c61ca96582467eac820b01461e494af&' 
+            iconURL: config.branding.icon
         })
         .setTimestamp();
     
@@ -808,7 +756,7 @@ async function setupApplications(interaction) {
         )
         .setFooter({ 
             text: 'RuzySoft | Applications System',
-            iconURL: 'https://cdn.discordapp.com/attachments/1337564450600910858/1460716091327254629/0b8e5a2c-1eff-414c-858c-b8af487e6111.png?ex=6967ed5e&is=69669bde&hm=2d42e3861eec9f9fbc767cfcdda36edd3c61ca96582467eac820b01461e494af&' 
+            iconURL: config.branding.icon
         });
     
     const row = new ActionRowBuilder()
@@ -1078,7 +1026,7 @@ async function handleTimeout(interaction) {
         const member = await interaction.guild.members.fetch(user.id);
         await member.timeout(ms, `By ${interaction.user.tag}: ${reason}`);
         
-        logAction('Timeout', user, interaction.user, { reason, duration });
+        logAction('Timeout', user, interaction.user, { reason, duration: formatDuration(ms) });
         
         const embed = new EmbedBuilder()
             .setTitle('⏰ User Timed Out')
@@ -1095,6 +1043,34 @@ async function handleTimeout(interaction) {
     } catch (error) {
         await interaction.reply({
             content: '❌ Failed to timeout user!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleUntimeout(interaction) {
+    const user = interaction.options.getUser('user');
+    const reason = interaction.options.getString('reason') || 'No reason provided';
+    
+    if (!isStaff(interaction.member)) {
+        return interaction.reply({
+            content: '❌ You do not have permission to remove timeouts!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+    
+    try {
+        const member = await interaction.guild.members.fetch(user.id);
+        await member.timeout(null, `By ${interaction.user.tag}: ${reason}`);
+        
+        logAction('Untimeout', user, interaction.user, { reason });
+        
+        await interaction.reply({
+            content: `✅ **${user.tag}'s** timeout has been removed!\n**Reason:** ${reason}`
+        });
+    } catch (error) {
+        await interaction.reply({
+            content: '❌ Failed to remove timeout!',
             flags: MessageFlags.Ephemeral
         });
     }
@@ -1168,6 +1144,141 @@ async function handleLock(interaction) {
     }
 }
 
+async function handleUnlock(interaction) {
+    const channel = interaction.options.getChannel('channel') || interaction.channel;
+    
+    if (!isStaff(interaction.member)) {
+        return interaction.reply({
+            content: '❌ You do not have permission to unlock channels!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+    
+    try {
+        await channel.permissionOverwrites.edit(interaction.guild.id, {
+            SendMessages: true
+        });
+        
+        await interaction.reply({
+            content: `✅ ${channel} has been unlocked!`,
+            flags: MessageFlags.Ephemeral
+        });
+    } catch (error) {
+        await interaction.reply({
+            content: '❌ Failed to unlock channel!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleSlowmode(interaction) {
+    const duration = interaction.options.getInteger('duration');
+    const channel = interaction.options.getChannel('channel') || interaction.channel;
+    
+    if (!isStaff(interaction.member)) {
+        return interaction.reply({
+            content: '❌ You do not have permission to set slowmode!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+    
+    try {
+        await channel.setRateLimitPerUser(duration);
+        
+        const message = duration === 0 ? 
+            `✅ Slowmode disabled in ${channel}` : 
+            `✅ Slowmode set to ${duration} seconds in ${channel}`;
+        
+        await interaction.reply({
+            content: message,
+            flags: MessageFlags.Ephemeral
+        });
+    } catch (error) {
+        await interaction.reply({
+            content: '❌ Failed to set slowmode!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleNick(interaction) {
+    const user = interaction.options.getUser('user');
+    const nickname = interaction.options.getString('nickname');
+    
+    if (!isStaff(interaction.member)) {
+        return interaction.reply({
+            content: '❌ You do not have permission to change nicknames!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+    
+    try {
+        const member = await interaction.guild.members.fetch(user.id);
+        await member.setNickname(nickname);
+        
+        await interaction.reply({
+            content: `✅ **${user.tag}'s** nickname changed to **${nickname}**`
+        });
+    } catch (error) {
+        await interaction.reply({
+            content: '❌ Failed to change nickname!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleAddRole(interaction) {
+    const user = interaction.options.getUser('user');
+    const role = interaction.options.getRole('role');
+    
+    if (!isStaff(interaction.member)) {
+        return interaction.reply({
+            content: '❌ You do not have permission to add roles!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+    
+    try {
+        const member = await interaction.guild.members.fetch(user.id);
+        await member.roles.add(role);
+        
+        await interaction.reply({
+            content: `✅ Added **${role.name}** role to **${user.tag}**`
+        });
+    } catch (error) {
+        await interaction.reply({
+            content: '❌ Failed to add role!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleRemoveRole(interaction) {
+    const user = interaction.options.getUser('user');
+    const role = interaction.options.getRole('role');
+    
+    if (!isStaff(interaction.member)) {
+        return interaction.reply({
+            content: '❌ You do not have permission to remove roles!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+    
+    try {
+        const member = await interaction.guild.members.fetch(user.id);
+        await member.roles.remove(role);
+        
+        await interaction.reply({
+            content: `✅ Removed **${role.name}** role from **${user.tag}**`
+        });
+    } catch (error) {
+        await interaction.reply({
+            content: '❌ Failed to remove role!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
 async function handleUserInfo(interaction) {
     const user = interaction.options.getUser('user') || interaction.user;
     const member = await interaction.guild.members.fetch(user.id);
@@ -1178,12 +1289,12 @@ async function handleUserInfo(interaction) {
         .setThumbnail(user.displayAvatarURL({ size: 512 }))
         .addFields(
             { name: 'ID', value: user.id, inline: true },
-            { name: 'Created', value: `<t:${Math.floor(user.createdTimestamp/1000)}:R>`, inline: true },
-            { name: 'Joined', value: `<t:${Math.floor(member.joinedTimestamp/1000)}:R>`, inline: true },
+            { name: 'Account Created', value: `<t:${Math.floor(user.createdTimestamp/1000)}:R>`, inline: true },
+            { name: 'Joined Server', value: `<t:${Math.floor(member.joinedTimestamp/1000)}:R>`, inline: true },
             { name: 'Roles', value: member.roles.cache.size > 1 ? 
                 member.roles.cache.filter(r => r.id !== interaction.guild.id).map(r => r.toString()).join(' ') : 'None', inline: false },
             { name: 'Highest Role', value: member.roles.highest.toString(), inline: true },
-            { name: 'Boosting', value: member.premiumSince ? `<t:${Math.floor(member.premiumSinceTimestamp/1000)}:R>` : 'No', inline: true }
+            { name: 'Boosting Since', value: member.premiumSince ? `<t:${Math.floor(member.premiumSinceTimestamp/1000)}:R>` : 'Not Boosting', inline: true }
         )
         .setFooter({ text: `Requested by ${interaction.user.tag}` })
         .setTimestamp();
@@ -1205,8 +1316,7 @@ async function handleServerInfo(interaction) {
             { name: '📚 Channels', value: guild.channels.cache.size.toString(), inline: true },
             { name: '🎭 Roles', value: guild.roles.cache.size.toString(), inline: true },
             { name: '✨ Boosts', value: guild.premiumSubscriptionCount.toString(), inline: true },
-            { name: '🔐 Verification', value: guild.verificationLevel.toString(), inline: true },
-            { name: '💎 Boost Tier', value: guild.premiumTier.toString(), inline: true }
+            { name: '💎 Boost Tier', value: `Tier ${guild.premiumTier}`, inline: true }
         )
         .setFooter({ text: `Server ID: ${guild.id}` })
         .setTimestamp();
@@ -1216,6 +1326,55 @@ async function handleServerInfo(interaction) {
     }
     
     await interaction.reply({ embeds: [embed] });
+}
+
+async function handleRoleInfo(interaction) {
+    const role = interaction.options.getRole('role');
+    
+    const embed = new EmbedBuilder()
+        .setTitle(`🎭 ${role.name}`)
+        .setColor(role.color || '#99aab5')
+        .addFields(
+            { name: 'ID', value: role.id, inline: true },
+            { name: 'Color', value: role.hexColor, inline: true },
+            { name: 'Position', value: role.position.toString(), inline: true },
+            { name: 'Members', value: role.members.size.toString(), inline: true },
+            { name: 'Mentionable', value: role.mentionable ? 'Yes' : 'No', inline: true },
+            { name: 'Hoisted', value: role.hoist ? 'Yes' : 'No', inline: true },
+            { name: 'Created', value: `<t:${Math.floor(role.createdTimestamp/1000)}:R>`, inline: true },
+            { name: 'Permissions', value: role.permissions.toArray().length > 0 ? 
+                role.permissions.toArray().slice(0, 10).join(', ') + (role.permissions.toArray().length > 10 ? '...' : '') : 'None' }
+        )
+        .setFooter({ text: `Requested by ${interaction.user.tag}` })
+        .setTimestamp();
+    
+    await interaction.reply({ embeds: [embed] });
+}
+
+async function handleEmbed(interaction) {
+    const title = interaction.options.getString('title');
+    const description = interaction.options.getString('description');
+    const color = interaction.options.getString('color') || config.embedColor;
+    const channel = interaction.options.getChannel('channel') || interaction.channel;
+    
+    if (!isStaff(interaction.member)) {
+        return interaction.reply({
+            content: '❌ You do not have permission to create embeds!',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+    
+    const embed = new EmbedBuilder()
+        .setTitle(title)
+        .setDescription(description)
+        .setColor(color)
+        .setTimestamp();
+    
+    await channel.send({ embeds: [embed] });
+    await interaction.reply({
+        content: `✅ Embed sent to ${channel}`,
+        flags: MessageFlags.Ephemeral
+    });
 }
 
 async function handleAnnounce(interaction) {
@@ -1235,8 +1394,8 @@ async function handleAnnounce(interaction) {
         .setDescription(message)
         .setColor('#10b981')
         .setFooter({ 
-            text: 'RuzySoft Announcement',
-            iconURL: interaction.guild.iconURL() 
+            text: config.branding.footer,
+            iconURL: config.branding.icon
         })
         .setTimestamp();
     
@@ -1297,6 +1456,56 @@ async function handleGiveaway(interaction) {
     }, ms);
 }
 
+async function endGiveaway(messageId) {
+    const giveaway = db.giveaways.find(g => g.messageId === messageId);
+    if (!giveaway) return;
+    
+    const channel = client.channels.cache.get(giveaway.channelId);
+    if (!channel) return;
+    
+    try {
+        const message = await channel.messages.fetch(messageId);
+        const reaction = message.reactions.cache.get('🎉');
+        
+        if (!reaction) return;
+        
+        const users = await reaction.users.fetch();
+        const validUsers = users.filter(u => !u.bot);
+        
+        if (validUsers.size < giveaway.winners) {
+            const embed = EmbedBuilder.from(message.embeds[0])
+                .setDescription(`**Prize:** ${giveaway.prize}\n**Winners:** ${giveaway.winners}\n**Ended:** Not enough participants!`)
+                .setColor('#ef4444');
+            
+            await message.edit({ embeds: [embed] });
+            await message.reply('🎉 Giveaway ended with not enough participants!');
+            return;
+        }
+        
+        const winners = [];
+        const userArray = Array.from(validUsers.values());
+        
+        for (let i = 0; i < giveaway.winners; i++) {
+            const randomIndex = Math.floor(Math.random() * userArray.length);
+            winners.push(userArray[randomIndex]);
+            userArray.splice(randomIndex, 1);
+        }
+        
+        const winnersText = winners.map(w => `<@${w.id}>`).join(', ');
+        
+        const embed = EmbedBuilder.from(message.embeds[0])
+            .setDescription(`**Prize:** ${giveaway.prize}\n**Winners:** ${winnersText}\n**Ended:** <t:${Math.floor(Date.now()/1000)}:R>`)
+            .setColor('#10b981');
+        
+        await message.edit({ embeds: [embed] });
+        await message.reply(`🎉 **Giveaway Ended!**\n**Winner(s):** ${winnersText}\n**Prize:** ${giveaway.prize}`);
+        
+        db.giveaways = db.giveaways.filter(g => g.messageId !== messageId);
+    } catch (error) {
+        console.error('Error ending giveaway:', error);
+    }
+}
+
 async function handlePoll(interaction) {
     const question = interaction.options.getString('question');
     const options = interaction.options.getString('options').split(',').map(o => o.trim());
@@ -1336,7 +1545,7 @@ async function handleStats(interaction) {
         .addFields(
             { name: '🤖 Bot Uptime', value: formatUptime(process.uptime()), inline: true },
             { name: '🏓 Ping', value: `${client.ws.ping}ms`, inline: true },
-            { name: '📚 Commands', value: '45+ commands', inline: true },
+            { name: '📚 Commands', value: '35+ commands', inline: true },
             { name: '👥 Total Members', value: interaction.guild.memberCount.toString(), inline: true },
             { name: '📚 Total Channels', value: interaction.guild.channels.cache.size.toString(), inline: true },
             { name: '🎭 Total Roles', value: interaction.guild.roles.cache.size.toString(), inline: true },
@@ -1344,9 +1553,19 @@ async function handleStats(interaction) {
             { name: '📝 Total Logs', value: db.logs.length.toString(), inline: true }
         )
         .setFooter({ 
-            text: 'RuzySoft | Premium Services',
-            iconURL: client.user.displayAvatarURL() 
+            text: config.branding.footer,
+            iconURL: config.branding.icon
         })
+        .setTimestamp();
+    
+    await interaction.reply({ embeds: [embed] });
+}
+
+async function handlePing(interaction) {
+    const embed = new EmbedBuilder()
+        .setTitle('🏓 Pong!')
+        .setDescription(`**WebSocket:** ${client.ws.ping}ms\n**Bot Latency:** ${Date.now() - interaction.createdTimestamp}ms`)
+        .setColor('#10b981')
         .setTimestamp();
     
     await interaction.reply({ embeds: [embed] });
@@ -1356,7 +1575,6 @@ async function handleHelp(interaction) {
     const command = interaction.options.getString('command');
     
     if (command) {
-        // Show specific command help
         const helpEmbed = new EmbedBuilder()
             .setTitle(`Help: /${command}`)
             .setColor('#3b82f6')
@@ -1366,7 +1584,6 @@ async function handleHelp(interaction) {
         
         await interaction.reply({ embeds: [helpEmbed], flags: MessageFlags.Ephemeral });
     } else {
-        // Show general help
         const embed = new EmbedBuilder()
             .setTitle('🛠️ RuzySoft Helper - Commands')
             .setColor('#7c3aed')
@@ -1390,12 +1607,12 @@ async function handleHelp(interaction) {
                 },
                 { 
                     name: '⚙️ Utilities', 
-                    value: '`/setup` `/afk` `/help`' 
+                    value: '`/setup` `/help`' 
                 }
             )
             .setFooter({ 
                 text: 'Use /help [command] for specific command information',
-                iconURL: 'https://cdn.discordapp.com/attachments/1337564450600910858/1460716091327254629/0b8e5a2c-1eff-414c-858c-b8af487e6111.png?ex=6967ed5e&is=69669bde&hm=2d42e3861eec9f9fbc767cfcdda36edd3c61ca96582467eac820b01461e494af&' 
+                iconURL: config.branding.icon
             })
             .setTimestamp();
         
@@ -1410,7 +1627,7 @@ function getCommandHelp(command) {
         warn: 'Warn a user\n**Usage:** `/warn user: [@user] reason: [text]`\n**Permissions:** Staff+',
         purge: 'Bulk delete messages\n**Usage:** `/purge amount: [1-100] user: [@user]`\n**Permissions:** Staff+',
         timeout: 'Timeout a user\n**Usage:** `/timeout user: [@user] duration: [60s/30m/2h/1d] reason: [text]`\n**Permissions:** Staff+',
-        setup: 'Setup RuzySoft systems\n**Usage:** `/setup system: [panel/applications/announcements/stats]`\n**Permissions:** Admin only',
+        setup: 'Setup RuzySoft systems\n**Usage:** `/setup system: [panel/applications]`\n**Permissions:** Admin only',
         announce: 'Make an announcement\n**Usage:** `/announce title: [text] message: [text] ping: [@role]`\n**Permissions:** Staff+',
         giveaway: 'Create a giveaway\n**Usage:** `/giveaway prize: [text] duration: [1h/2d] winners: [1-10]`\n**Permissions:** Staff+'
     };
@@ -1426,4 +1643,5 @@ function formatUptime(seconds) {
     return `${days}d ${hours}h ${minutes}m`;
 }
 
+// Start the bot
 client.login(process.env.DISCORD_TOKEN);
