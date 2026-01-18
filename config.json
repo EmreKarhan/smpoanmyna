@@ -1,0 +1,44 @@
+{
+  "guildId": "1331289210627293276",
+  "ownerId": "741753240827461672",
+  "ticketRoleId": [
+    "1334633974131068968",
+    "1334633975095758878",
+    "1460725532936110101"
+  ],
+  "ticketCategoryId": "1334634042242633840",
+  "logChannelId": "1460734266236211314",
+  "categories": {
+    "payment": {
+      "name": "Payments",
+      "description": "Billing, purchases & payment support.",
+      "emoji": "💳"
+    },
+    "support": {
+      "name": "Support",
+      "description": "Product help & technical assistance.",
+      "emoji": "💬"
+    },
+    "reseller": {
+      "name": "Reseller",
+      "description": "Apply for reseller partnership.",
+      "emoji": "🤝"
+    },
+    "media": {
+      "name": "Media",
+      "description": "Creator & promoter applications.",
+      "emoji": "📺"
+    },
+    "hwid": {
+      "name": "🔧 HWID Reset",
+      "description": "Reset your hardware identification.",
+      "emoji": "🔧"
+    }
+  },
+  "embedColor": "#7c3aed",
+  "supportMessage": {
+    "title": "🎫 Create a Ticket",
+    "description": "Choose the **appropriate category** to get started.\n\n• One ticket per category\n• No spam or unnecessary pings\n• Please be patient while we assist you\n• Reseller purchases are handled by the reseller\n\n**Support Online**\n<@&1460720542897279319>",
+    "footer": "RuzySoft Tickets"
+  }
+}
