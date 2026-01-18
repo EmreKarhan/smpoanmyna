@@ -1,14 +1,12 @@
 {
   "guildId": "1462207490719748250",
   "ownerId": "741753240827461672",
-  "adminRoles": "1462207491063419108",
+  "adminRoles": ["1462207491063419108"],
   "logChannelId": "1460734266236211314",
-  "warnThreshold": 3,
   "embedColor": "#7c3aed",
-  "publicCommands": ["help", "ping", "userinfo", "serverinfo", "stats"],
   "branding": {
     "name": "RuzySoft",
     "icon": "https://cdn.discordapp.com/attachments/1462207492275572883/1462402361761730602/391a9977-1ccc-4749-be4c-f8cdfd572f6e.png",
-    "footer": "RuzySoft | Helpers"
+    "footer": "RuzySoft | Premium Services"
   }
 }
