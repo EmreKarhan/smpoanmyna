@@ -1,3 +1,23 @@
+try {
+    if (!globalThis.ReadableStream) {
+        console.log('⚠️ ReadableStream not found, loading polyfill...');
+        const { ReadableStream } = require('stream/web');
+        globalThis.ReadableStream = ReadableStream;
+        console.log('✅ ReadableStream polyfill loaded');
+    }
+} catch (error) {
+    console.log('⚠️ Native ReadableStream not available, trying alternative...');
+    try {
+        const { ReadableStream } = require('web-streams-polyfill/ponyfill');
+        globalThis.ReadableStream = ReadableStream;
+        console.log('✅ web-streams-polyfill loaded');
+    } catch (polyfillError) {
+        console.error('❌ Failed to load ReadableStream polyfill:', polyfillError.message);
+        process.exit(1);
+    }
+}
+
+// Discord.js ve diğer kütüphaneleri yükle
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelType, ButtonBuilder, ButtonStyle, MessageFlags, ActivityType } = require('discord.js');
 const fs = require('fs');
 
