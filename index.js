@@ -87,7 +87,7 @@ const db = {
 let statusIndex = 0;
 const statusMessages = [
     { 
-        text: "discord.gg/pnTjcgSAMB", 
+        text: "discord․gg/pnTjcgSAMB", 
         type: ActivityType.Watching
     },
     { 
@@ -198,19 +198,16 @@ function parseDuration(duration) {
 // STATUS UPDATE FUNCTION
 function updateStatus() {
     try {
-        const status = statusMessages[statusIndex];
-        
+        const activities = [
+            { name: 'RUZYSOFT.NET', type: ActivityType.Watching },
+            { name: 'discord․gg/pnTjcgSAMB', type: ActivityType.Watching } // özel nokta
+        ];
+
         client.user.setPresence({
-            status: 'dnd', 
-            activities: [{
-                name: status.text,
-                type: status.type
-            }]
+            activities: [activities[statusIndex]],
+            status: 'dnd' 
         });
         
-        console.log(`🔄 Status updated: ${status.text}`);
-        
-        // Update index for next status
         statusIndex = (statusIndex + 1) % statusMessages.length;
         
     } catch (error) {
@@ -236,8 +233,7 @@ client.once('ready', async () => {
     // SET INITIAL STATUS
     updateStatus();
     
-    // UPDATE STATUS EVERY 10 SECONDS
-    setInterval(updateStatus, 10000);
+    setInterval(updateStatus, 5000);
     
     // SLASH COMMANDS - FULL SET
     const commands = [
