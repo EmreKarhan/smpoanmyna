@@ -200,9 +200,12 @@ function updateStatus() {
     try {
         const status = statusMessages[statusIndex];
         
-        client.user.setActivity({
-            name: status.text,
-            type: status.type
+        client.user.setPresence({
+            status: 'dnd', 
+            activities: [{
+                name: status.text,
+                type: status.type
+            }]
         });
         
         console.log(`🔄 Status updated: ${status.text}`);
