@@ -87,7 +87,7 @@ const db = {
 let statusIndex = 0;
 const statusMessages = [
     { 
-        text: "https://discord.gg/pnTjcgSAMB", 
+        text: "discord.gg/pnTjcgSAMB", 
         type: ActivityType.Watching
     },
     { 
